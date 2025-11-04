@@ -59,10 +59,11 @@ const loginScreen=document.getElementById("login-screen");
 const instructionScreen=document.getElementById("instructions");
 const examScreen=document.getElementById("exam-screen");
 const studentNameDisplay=document.getElementById("studentName");
-
-let score=0, malpracticeCount=0, current=0, timer, time=5*60;
 const timerDisplay=document.getElementById("timer");
 const questionBox=document.getElementById("question-box");
+
+let score=0, malpracticeCount=0, current=0, timer, time=5*60;
+let lastFrameTime=Date.now();
 
 const questions=[
  {q:"What is the capital of Nigeria?",options:["Lagos","Abuja","Kano","Ibadan"],correct:1},
@@ -89,6 +90,7 @@ function startExam(){
  loadQuestion();
  startTimer();
  startCameraProctoring();
+ setupTabMonitor();
 }
 
 function loadQuestion(){
@@ -115,22 +117,40 @@ document.getElementById("next-btn").onclick=()=>{
 function startTimer(){
  timer=setInterval(()=>{
    let m=Math.floor(time/60),s=time%60;
-   timerDisplay.textContent=`Time: ${m}:${s.toString().padStart(2,'0')}`;
+   timerDisplay.textContent=`Time: ${m}:${s.toString().padStart(2,'0')} | ⚠️ Malpractice: ${malpracticeCount}`;
    if(time<=0)finishExam();
    time--;
  },1000);
 }
 
+// --- TAB SWITCH OR MINIMIZE DETECTION ---
+function setupTabMonitor(){
+ document.addEventListener("visibilitychange",()=>{
+   if(document.hidden){
+     malpracticeCount++;
+     alert("⚠️ Malpractice detected: Tab switch or minimize!");
+   }
+ });
+ window.addEventListener("blur",()=>{
+   malpracticeCount++;
+   console.warn("⚠️ Malpractice: Window focus lost!");
+ });
+}
+
+// --- CAMERA PROCTORING ---
 async function startCameraProctoring(){
  try{
    const stream=await navigator.mediaDevices.getUserMedia({video:true});
    camera.srcObject=stream;
 
    await faceapi.nets.tinyFaceDetector.loadFromUri('https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/models');
-   await faceapi.nets.faceLandmark68Net.loadFromUri('https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/models');
+
+   let lastFrame = null;
 
    setInterval(async()=>{
      const detections=await faceapi.detectAllFaces(camera,new faceapi.TinyFaceDetectorOptions());
+     
+     // 1️⃣ Face presence check
      if(detections.length===0){
        malpracticeCount++;
        console.warn("⚠️ Malpractice: No face detected!");
@@ -138,17 +158,37 @@ async function startCameraProctoring(){
        malpracticeCount++;
        console.warn("⚠️ Malpractice: Multiple faces detected!");
      }
-   },3000);
+
+     // 2️⃣ Freeze / camera cover check
+     const canvas = document.createElement("canvas");
+     canvas.width=camera.videoWidth;
+     canvas.height=camera.videoHeight;
+     const ctx = canvas.getContext("2d");
+     ctx.drawImage(camera,0,0,canvas.width,canvas.height);
+     const frame = ctx.getImageData(0,0,canvas.width,canvas.height).data;
+
+     if(lastFrame){
+       let diff=0;
+       for(let i=0;i<frame.length;i+=50){ 
+         diff += Math.abs(frame[i]-lastFrame[i]);
+       }
+       if(diff<1000){ 
+         malpracticeCount++;
+         console.warn("⚠️ Malpractice: Camera possibly covered or frozen!");
+       }
+     }
+     lastFrame = frame;
+   },4000);
 
  }catch(e){
    alert("Camera access denied.");
  }
 }
 
+// --- FINISH EXAM ---
 function finishExam(){
  clearInterval(timer);
- let adjustedScore=score-Math.min(malpracticeCount,score);
- if(adjustedScore<0)adjustedScore=0;
+ let adjustedScore=Math.max(score - Math.min(malpracticeCount,score),0);
  alert(`Exam Finished!
 Score: ${score}/${questions.length}
 Malpractice Count: ${malpracticeCount}
