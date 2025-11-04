@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UNILAG Post-UTME CBT Simulator</title>
+<style>
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: #f3f6fc;
+    margin: 0;
+  }
+  header {
+    background: #004aad;
+    color: white;
+    padding: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  header h2 {
+    margin: 0;
+    font-size: 18px;
+  }
+  .camera-box {
+    width: 3cm;
+    height: 3cm;
+    border: 2px solid #fff;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #000;
+  }
+  video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .container {
+    max-width: 700px;
+    margin: 30px auto;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    padding: 20px;
+  }
+  .hidden {
+    display: none;
+  }
+  button {
+    background: #004aad;
+    color: #fff;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button:hover {
+    background: #0066ff;
+  }
+  .question {
+    margin-top: 15px;
+  }
+  .options label {
+    display: block;
+    margin: 6px 0;
+    background: #eef3ff;
+    padding: 8px;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .timer {
+    text-align: right;
+    color: #d32f2f;
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h2>UNILAG Post-UTME CBT Simulator</h2>
+  <div class="camera-box">
+    <video id="camera" autoplay muted></video>
+  </div>
+</header>
+
+<!-- LOGIN SCREEN -->
+<div class="container" id="login-screen">
+  <h3>Candidate Login</h3>
+  <input type="text" id="name" placeholder="Enter your full name" style="width:100%;padding:8px;margin:5px 0;"><br>
+  <input type="email" id="email" placeholder="Enter your email" style="width:100%;padding:8px;margin:5px 0;"><br>
+  <input type="text" id="examCode" placeholder="Enter Exam Code (optional)" style="width:100%;padding:8px;margin:5px 0;"><br>
+  <button id="loginBtn">Proceed</button>
+</div>
+
+<!-- INSTRUCTIONS SCREEN -->
+<div class="container hidden" id="instructions">
+  <h3>Exam Instructions</h3>
+  <p>Welcome, <span id="studentName"></span>.</p>
+  <ul>
+    <li>Ensure your camera stays on throughout the exam.</li>
+    <li>Do not look away from your screen or leave the camera view.</li>
+    <li>You have 5 minutes to complete this test.</li>
+    <li>Each malpractice detection will reduce your score by 1 mark.</li>
+  </ul>
+  <button id="startExamBtn">Start Exam</button>
+</div>
+
+<!-- EXAM SCREEN -->
+<div class="container hidden" id="exam-screen">
+  <div class="timer" id="timer">Time: 05:00</div>
+  <div id="question-box"></div>
+  <button id="next-btn">Next</button>
+</div>
+
+<script>
+// ======== LOGIN LOGIC ========
+const loginScreen = document.getElementById("login-screen");
+const instructionScreen = document.getElementById("instructions");
+const examScreen = document.getElementById("exam-screen");
+const nameInput = document.getElementById("name");
+const emailInput = document.getElementById("email");
+const studentNameDisplay = document.getElementById("studentName");
+
+document.getElementById("loginBtn").addEventListener("click", () => {
+  const name = nameInput.value.trim();
+  const email = emailInput.value.trim();
+
+  if (!name || !email) {
+    alert("Please enter both name and email.");
+    return;
+  }
+
+  studentNameDisplay.textContent = name;
+  loginScreen.classList.add("hidden");
+  instructionScreen.classList.remove("hidden");
+});
+
+// ======== START EXAM ========
+document.getElementById("startExamBtn").addEventListener("click", () => {
+  instructionScreen.classList.add("hidden");
+  examScreen.classList.remove("hidden");
+  startExam();
+});
+
+// ======== QUESTIONS =========
+const questions = [
+  { q: "What is the capital of Nigeria?", options: ["Lagos", "Abuja", "Kano", "Ibadan"], correct: 1 },
+  { q: "2 + 2 = ?", options: ["3", "4", "5", "6"], correct: 1 },
+  { q: "Which planet is known as the Red Planet?", options: ["Earth", "Venus", "Mars", "Jupiter"], correct: 2 }
+];
+let current = 0;
+let score = 0;
+let answers = {};
+let malpracticeCount = 0;
+const questionBox = document.getElementById("question-box");
+const nextBtn = document.getElementById("next-btn");
+
+function loadQuestion() {
+  const q = questions[current];
+  questionBox.innerHTML = `
+    <div class="question">
+      <h4>Question ${current + 1} of ${questions.length}</h4>
+      <p>${q.q}</p>
+      <div class="options">
+        ${q.options.map((opt, i) =>
+          `<label><input type="radio" name="option" value="${i}"> ${opt}</label>`
+        ).join('')}
+      </div>
+    </div>`;
+}
+
+function startExam() {
+  loadQuestion();
+  startTimer();
+}
+
+nextBtn.addEventListener("click", () => {
+  const selected = document.querySelector("input[name='option']:checked");
+  if (!selected) return alert("Please select an answer first.");
+  const value = parseInt(selected.value);
+  answers[current] = value;
+  if (value === questions[current].correct) score++;
+
+  current++;
+  if (current < questions.length) {
+    loadQuestion();
+  } else {
+    finishExam();
+  }
+});
+
+// ======== TIMER ========
+let time = 5 * 60; // 5 minutes
+const timerDisplay = document.getElementById("timer");
+let timer;
+
+function startTimer() {
+  timer = setInterval(() => {
+    let minutes = Math.floor(time / 60);
+    let seconds = time % 60;
+    timerDisplay.textContent = `Time: ${minutes}:${seconds.toString().padStart(2, "0")}`;
+    if (time <= 0) finishExam();
+    time--;
+  }, 1000);
+}
+
+// ======== CAMERA ========
+const camera = document.getElementById("camera");
+navigator.mediaDevices.getUserMedia({ video: true })
+  .then(stream => {
+    camera.srcObject = stream;
+    monitorCamera(stream);
+  })
+  .catch(() => {
+    alert("Camera access denied. Proctoring disabled.");
+  });
+
+// ======== MALPRACTICE DETECTION (basic) ========
+function monitorCamera(stream) {
+  const track = stream.getVideoTracks()[0];
+  const imageCapture = new ImageCapture(track);
+  let faceMissingFrames = 0;
+
+  setInterval(async () => {
+    try {
+      const bitmap = await imageCapture.grabFrame();
+      if (bitmap.width === 0 || bitmap.height === 0) {
+        faceMissingFrames++;
+      } else {
+        faceMissingFrames = 0;
+      }
+
+      if (faceMissingFrames > 10) {
+        malpracticeCount++;
+        console.warn("Malpractice detected: Face missing!");
+        faceMissingFrames = 0;
+      }
+    } catch (e) {}
+  }, 2000);
+}
+
+// ======== SUBMISSION ========
+function finishExam() {
+  clearInterval(timer);
+  let adjustedScore = score - malpracticeCount;
+  if (adjustedScore < 0) adjustedScore = 0;
+  alert(`Exam Finished!
+  Score: ${score}/${questions.length}
+  Penalties: ${malpracticeCount}
+  Final Score: ${adjustedScore}`);
+}
+</script>
+</body>
+</html>
